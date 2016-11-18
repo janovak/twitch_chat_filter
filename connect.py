@@ -5,8 +5,8 @@ MAX_BUFFER_SIZE = 1024
 MESSAGE_ENCODING = 'UTF-8'
 
 def validate(message):
-    metadata = message.split(' :')[0]
-    return message[0] == ':' and \
+    return message is not '' and \
+           message[0] == ':' and \
            '!' in message and \
            '@' in message and \
            '#' in message
@@ -33,7 +33,7 @@ def parse_channel(message):
 
 def parse_message_text(message):
     if validate(message) and parse_message_type(message) == 'PRIVMSG':
-        return message.split(' :', 1)[1].strip()
+        return message.split(' :', 1)[1]
 
 def parse_message_fields(message):
     return {'NICKNAME' : parse_nickname(message),
@@ -43,30 +43,34 @@ def parse_message_fields(message):
             'CHANNEL' : parse_channel(message),
             'TEXT' : parse_message_text(message)}
 
-def receive_message(mySocket):
-    return mySocket.recv(MAX_BUFFER_SIZE).decode(MESSAGE_ENCODING)
+def recv_message(mySocket):
+    return mySocket.recv(MAX_BUFFER_SIZE).decode(MESSAGE_ENCODING).strip()
 
 def print_chat(message):
-    print('%s: %s' % (message['USERNAME'], message['TEXT']))
+    print('%s: %s' % (parse_username(message), parse_message_text(message)))
 
-def process_message(message, function):
-    function(message)
+def process_message(function, *args):
+    function(*args)
 
 def listen_to_chat(mySocket, filter):
     while mySocket:
-        message = parse_message_fields(receive_message(mySocket))
-        if filter.count(message['USERNAME']) > 0 and message['TYPE'] == 'PRIVMSG':
-            process_message(message, print_chat)
+        message = recv_message(mySocket)
+        if filter.count(parse_username(message)) > 0 and parse_message_type(message) == 'PRIVMSG':
+            *args, = [message]
+            process_message(print_chat, *args)
+        elif message == 'PING :tmi.twitch.tv':
+            *args, = [mySocket, 'PONG', ' :tmi.twitch.tv']
+            process_message(send_message, *args)
 
 def join_channel(socket,
                  oauth,
                  nickname,
                  channel):
-    message(socket, 'PASS', oauth)
-    message(socket, 'NICK', nickname)
-    message(socket, 'JOIN', '#' + channel)
+    send_message(socket, 'PASS', oauth)
+    send_message(socket, 'NICK', nickname)
+    send_message(socket, 'JOIN', '#' + channel)
 
-def message(socket,
+def send_message(socket,
             msg_type,
             message):
     socket.send(bytes(('%s %s\r\n' % (msg_type, message)), MESSAGE_ENCODING))
@@ -91,7 +95,6 @@ def main():
     whitelist = list()
     with open('whitelistednames', 'r') as fd:
         whitelist = fd.read().splitlines()
-        fd.close()
 
     join_channel(mySocket, oauth, nickname, channel)
     listen_to_chat(mySocket, whitelist)
