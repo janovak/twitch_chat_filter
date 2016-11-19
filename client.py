@@ -35,14 +35,6 @@ def parse_message_text(message):
     if validate(message) and parse_message_type(message) == 'PRIVMSG':
         return message.split(' :', 1)[1]
 
-def parse_message_fields(message):
-    return {'NICKNAME' : parse_nickname(message),
-            'USERNAME' : parse_username(message),
-            'HOST' : parse_host(message),
-            'TYPE' : parse_message_type(message),
-            'CHANNEL' : parse_channel(message),
-            'TEXT' : parse_message_text(message)}
-
 def recv_message(mySocket):
     return mySocket.recv(MAX_BUFFER_SIZE).decode(MESSAGE_ENCODING).strip()
 
@@ -55,6 +47,7 @@ def process_message(function, *args):
 def listen_to_chat(mySocket, filter):
     while mySocket:
         message = recv_message(mySocket)
+        print(message)
         if filter.count(parse_username(message)) > 0 and parse_message_type(message) == 'PRIVMSG':
             *args, = [message]
             process_message(print_chat, *args)
@@ -62,17 +55,12 @@ def listen_to_chat(mySocket, filter):
             *args, = [mySocket, 'PONG', ' :tmi.twitch.tv']
             process_message(send_message, *args)
 
-def join_channel(socket,
-                 oauth,
-                 nickname,
-                 channel):
+def join_channel(socket, channel, nickname, oauth):
     send_message(socket, 'PASS', oauth)
     send_message(socket, 'NICK', nickname)
     send_message(socket, 'JOIN', '#' + channel)
 
-def send_message(socket,
-            msg_type,
-            message):
+def send_message(socket, msg_type, message):
     socket.send(bytes(('%s %s\r\n' % (msg_type, message)), MESSAGE_ENCODING))
 
 def connect(socket,
@@ -81,14 +69,9 @@ def connect(socket,
     socket.connect((dest, port))
 
 def main():
-    channel = argv[1]
-    nickname = argv[2]
-    oauth = argv[3]
     mySocket = socket.socket()
     if len(argv) > 5:
-        dest = argv[4]
-        port = argv[5]
-        connect(mySocket, dest, port)
+        connect(mySocket, argv[4], argv[5])
     else:
         connect(mySocket)
 
@@ -96,7 +79,7 @@ def main():
     with open('whitelistednames', 'r') as fd:
         whitelist = fd.read().splitlines()
 
-    join_channel(mySocket, oauth, nickname, channel)
+    join_channel(mySocket, argv[1], argv[2], argv[3])
     listen_to_chat(mySocket, whitelist)
 
     mySocket.close()
